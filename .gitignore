@@ -1,0 +1,42 @@
+# .NET
+**/bin/
+**/obj/
+TestResults/
+*.user
+*.suo
+*.rsuser
+
+# Build/publish artifacts
+artifacts/
+*.zip
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local secrets/config
+*.env
+*.local
+secrets.json
+**/appsettings.json
+**/appsettings.*.json
+!**/appsettings.example.json
+!**/appsettings.Development.example.json
+
+# Generated documents
+plans/*.docx
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
