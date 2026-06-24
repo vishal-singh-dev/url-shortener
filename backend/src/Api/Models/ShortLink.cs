@@ -7,13 +7,15 @@ public sealed class ShortLink
         string longUrl,
         DateTimeOffset createdAtUtc,
         DateTimeOffset? expiresAtUtc,
-        bool isCustomAlias)
+        bool isCustomAlias,
+        long clickCount = 0)
     {
         Code = code;
         LongUrl = longUrl;
         CreatedAtUtc = createdAtUtc;
         ExpiresAtUtc = expiresAtUtc;
         IsCustomAlias = isCustomAlias;
+        ClickCount = clickCount;
     }
 
     public string Code { get; }
@@ -33,8 +35,4 @@ public sealed class ShortLink
         return ExpiresAtUtc is not null && ExpiresAtUtc <= nowUtc;
     }
 
-    public void RegisterClick()
-    {
-        ClickCount++;
-    }
 }

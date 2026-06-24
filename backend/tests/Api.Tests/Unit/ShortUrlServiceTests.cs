@@ -53,57 +53,11 @@ public sealed class ShortUrlServiceTests
         Assert.Equal(CreateShortUrlStatus.Conflict, duplicate.Status);
     }
 
-    [Fact]
-    public async Task GetRedirectAsync_ForExpiredLink_ReturnsExpired()
-    {
-        var clock = new TestClock(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
-        var service = CreateService(clock);
-
-        var created = await service.CreateAsync(
-            new CreateShortUrlRequest(
-                "https://example.com",
-                "expired",
-                clock.UtcNow.AddMinutes(1)),
-            "https://sho.rt",
-            CancellationToken.None);
-
-        clock.UtcNow = clock.UtcNow.AddMinutes(2);
-
-        var redirect = await service.GetRedirectAsync(created.Link!.Code, null, null, CancellationToken.None);
-
-        Assert.Equal(RedirectLookupStatus.Expired, redirect.Status);
-    }
-
-    [Fact]
-    public async Task GetRedirectAsync_ForActiveLink_TracksClick()
-    {
-        var service = CreateService();
-
-        var created = await service.CreateAsync(
-            new CreateShortUrlRequest("https://example.com", "active", null),
-            "https://sho.rt",
-            CancellationToken.None);
-
-        var redirect = await service.GetRedirectAsync(
-            created.Link!.Code,
-            "https://referrer.example",
-            "test-agent",
-            CancellationToken.None);
-
-        var stats = await service.GetStatsAsync(created.Link.Code, "https://sho.rt", CancellationToken.None);
-
-        Assert.Equal(RedirectLookupStatus.Found, redirect.Status);
-        Assert.Equal("https://example.com", redirect.LongUrl);
-        Assert.Equal(1, stats!.ClickCount);
-        Assert.Single(stats.RecentClicks);
-    }
-
     private static ShortUrlService CreateService(IClock? clock = null)
     {
         return new ShortUrlService(
             new InMemoryShortLinkRepository(),
             new InMemoryShortCodeGenerator(),
-            new NoOpClickEventPublisher(),
             clock ?? new TestClock(DateTimeOffset.UtcNow));
     }
 

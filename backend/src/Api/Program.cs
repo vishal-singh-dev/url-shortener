@@ -38,6 +38,8 @@ builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 
 var app = builder.Build();
 
+await InitializeDatabaseAsync(app);
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -106,28 +108,6 @@ app.MapGet("/api/urls/{code}/stats", async (
 })
     .WithName("GetShortUrlStats");
 
-app.MapGet("/{code}", async (
-    string code,
-    ShortUrlService shortUrls,
-    HttpContext httpContext,
-    CancellationToken cancellationToken) =>
-{
-    var result = await shortUrls.GetRedirectAsync(
-        code,
-        httpContext.Request.Headers.Referer.ToString(),
-        httpContext.Request.Headers.UserAgent.ToString(),
-        cancellationToken);
-
-    return result.Status switch
-    {
-        RedirectLookupStatus.Found => Results.Redirect(result.LongUrl!, permanent: false),
-        RedirectLookupStatus.Expired => Results.StatusCode(StatusCodes.Status410Gone),
-        RedirectLookupStatus.NotFound => Results.NotFound(new { error = "Short URL was not found." }),
-        _ => Results.Problem("Unexpected redirect lookup result.")
-    };
-})
-    .WithName("RedirectShortUrl");
-
 app.Run();
 
 static string GetShortUrlBase(HttpContext httpContext)
@@ -142,6 +122,18 @@ static string GetShortUrlBase(HttpContext httpContext)
     }
 
     return $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
+}
+
+static async Task InitializeDatabaseAsync(WebApplication app)
+{
+    var initializer = app.Services.GetService<Api.Database.DatabaseInitializer>();
+
+    if (initializer is null)
+    {
+        return;
+    }
+
+    await initializer.InitializeAsync(CancellationToken.None);
 }
 
 public partial class Program;

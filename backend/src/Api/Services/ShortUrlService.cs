@@ -9,18 +9,15 @@ public sealed partial class ShortUrlService
     private const int MaxGeneratedCodeAttempts = 5;
     private readonly IShortLinkRepository _links;
     private readonly IShortCodeGenerator _codes;
-    private readonly IClickEventPublisher _clickEvents;
     private readonly IClock _clock;
 
     public ShortUrlService(
         IShortLinkRepository links,
         IShortCodeGenerator codes,
-        IClickEventPublisher clickEvents,
         IClock clock)
     {
         _links = links;
         _codes = codes;
-        _clickEvents = clickEvents;
         _clock = clock;
     }
 
@@ -72,39 +69,6 @@ public sealed partial class ShortUrlService
         return CreateShortUrlResult.Conflict("Could not generate a unique short code.");
     }
 
-    public async Task<RedirectLookupResult> GetRedirectAsync(
-        string code,
-        string? referrer,
-        string? userAgent,
-        CancellationToken cancellationToken)
-    {
-        var link = await _links.GetByCodeAsync(code, cancellationToken);
-
-        if (link is null)
-        {
-            return new RedirectLookupResult(RedirectLookupStatus.NotFound, null);
-        }
-
-        if (link.IsExpired(_clock.UtcNow))
-        {
-            return new RedirectLookupResult(RedirectLookupStatus.Expired, null);
-        }
-
-        var clickEvent = new ClickEvent(code, _clock.UtcNow, referrer, userAgent);
-        await _links.RegisterClickAsync(clickEvent, cancellationToken);
-
-        try
-        {
-            await _clickEvents.PublishAsync(clickEvent, cancellationToken);
-        }
-        catch
-        {
-            // Redirects should keep working even when async analytics transport is unavailable.
-        }
-
-        return new RedirectLookupResult(RedirectLookupStatus.Found, link.LongUrl);
-    }
-
     public async Task<IReadOnlyList<ShortLinkResponse>> GetRecentAsync(
         int limit,
         string shortUrlBase,
@@ -128,16 +92,13 @@ public sealed partial class ShortUrlService
             return null;
         }
 
-        var clicks = await _links.GetRecentClicksAsync(code, 25, cancellationToken);
-
         return new LinkStatsResponse(
             link.Code,
             BuildShortUrl(shortUrlBase, link.Code),
             link.LongUrl,
             link.ClickCount,
             link.CreatedAtUtc,
-            link.ExpiresAtUtc,
-            clicks.Select(click => new RecentClickResponse(click.OccurredAtUtc, click.Referrer, click.UserAgent)).ToArray());
+            link.ExpiresAtUtc);
     }
 
     private static ShortLinkResponse ToResponse(ShortLink link, string shortUrlBase)

@@ -1,7 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
+using Api.Contracts;
+using Api.Database;
+using Api.Infrastructure;
 using Api.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Api.Tests.Integration;
 
@@ -11,7 +17,26 @@ public sealed class UrlEndpointsTests : IClassFixture<WebApplicationFactory<Prog
 
     public UrlEndpointsTests(WebApplicationFactory<Program> factory)
     {
-        _factory = factory;
+        _factory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, configuration) =>
+            {
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Database:UseInMemory"] = "true",
+                    ["ConnectionStrings:Default"] = "",
+                    ["Redis:ConnectionString"] = ""
+                });
+            });
+
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IDbConnectionFactory>();
+                services.RemoveAll<DatabaseInitializer>();
+                services.RemoveAll<IShortLinkRepository>();
+                services.AddSingleton<IShortLinkRepository, InMemoryShortLinkRepository>();
+            });
+        });
     }
 
     [Fact]
@@ -48,33 +73,9 @@ public sealed class UrlEndpointsTests : IClassFixture<WebApplicationFactory<Prog
     }
 
     [Fact]
-    public async Task GetCode_ForActiveAlias_ReturnsRedirectAndUpdatesStats()
+    public async Task UnknownPath_ReturnsNotFound()
     {
-        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
-
-        await client.PostAsJsonAsync(
-            "/api/urls",
-            new CreateShortUrlRequest("https://example.com/landing", "landing", null));
-
-        var redirect = await client.GetAsync("/landing");
-        var stats = await client.GetFromJsonAsync<LinkStatsResponse>("/api/urls/landing/stats");
-
-        Assert.Equal(HttpStatusCode.Redirect, redirect.StatusCode);
-        Assert.Equal("https://example.com/landing", redirect.Headers.Location?.ToString());
-        Assert.NotNull(stats);
-        Assert.Equal(1, stats.ClickCount);
-    }
-
-    [Fact]
-    public async Task GetCode_ForMissingCode_ReturnsNotFound()
-    {
-        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
+        var client = _factory.CreateClient();
 
         var response = await client.GetAsync("/missing-code");
 
