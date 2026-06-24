@@ -18,6 +18,7 @@ jobs:
   deploy:
     name: Build, Package, and Deploy Lambda Code
     runs-on: ubuntu-latest
+    environment: bitly
 
     steps:
       - name: Checkout
