@@ -1,0 +1,87 @@
+name: Deploy Lambda API
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-south-1
+  API_PROJECT: backend/src/Api/Api.csproj
+  PUBLISH_DIR: artifacts/api-publish
+  ZIP_PATH: artifacts/api-lambda.zip
+  TERRAFORM_DIR: infra/lambda
+
+jobs:
+  deploy:
+    name: Build, Package, and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore backend/Backend.sln
+
+      - name: Build
+        run: dotnet build backend/Backend.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test backend/Backend.sln --configuration Release --no-build
+
+      - name: Publish Lambda package
+        run: |
+          rm -rf "$PUBLISH_DIR" "$ZIP_PATH"
+          mkdir -p "$PUBLISH_DIR" "$(dirname "$ZIP_PATH")"
+          dotnet publish "$API_PROJECT" \
+            --configuration Release \
+            --framework net8.0 \
+            --runtime linux-arm64 \
+            --self-contained false \
+            --output "$PUBLISH_DIR"
+          cd "$PUBLISH_DIR"
+          zip -r "../api-lambda.zip" .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.6
+
+      - name: Terraform init
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform init
+
+      - name: Terraform validate
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform validate
+
+      - name: Terraform apply
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          terraform apply -auto-approve \
+            -var "aws_region=${AWS_REGION}" \
+            -var "neon_database_url=${{ secrets.NEON_DATABASE_URL }}" \
+            -var "redis_connection_string=${{ secrets.REDIS_CONNECTION_STRING }}"
+
+      - name: Show API URL
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform output api_base_url

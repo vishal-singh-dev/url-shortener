@@ -172,10 +172,10 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      ASPNETCORE_ENVIRONMENT  = var.environment
-      NEON_DATABASE_URL       = var.neon_database_url
-      Redis__ConnectionString = var.redis_connection_string
-      FRONTEND_BUCKET_NAME    = aws_s3_bucket.frontend.bucket
+      ASPNETCORE_ENVIRONMENT     = var.environment
+      ConnectionStrings__Default = var.neon_database_url
+      Redis__ConnectionString    = var.redis_connection_string
+      FRONTEND_BUCKET_NAME       = aws_s3_bucket.frontend.bucket
     }
   }
 
