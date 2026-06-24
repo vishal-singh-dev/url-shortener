@@ -12,11 +12,11 @@ env:
   API_PROJECT: backend/src/Api/Api.csproj
   PUBLISH_DIR: artifacts/api-publish
   ZIP_PATH: artifacts/api-lambda.zip
-  TERRAFORM_DIR: infra/lambda
+  LAMBDA_FUNCTION_NAME: bitly-clone-dev-api
 
 jobs:
   deploy:
-    name: Build, Package, and Deploy
+    name: Build, Package, and Deploy Lambda Code
     runs-on: ubuntu-latest
 
     steps:
@@ -59,29 +59,34 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: github-actions-url-shortener-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.15.6
-
-      - name: Terraform init
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: terraform init
-
-      - name: Terraform validate
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: terraform validate
-
-      - name: Terraform apply
-        working-directory: ${{ env.TERRAFORM_DIR }}
+      - name: Update Lambda configuration
         run: |
-          terraform apply -auto-approve \
-            -var "aws_region=${AWS_REGION}" \
-            -var "neon_database_url=${{ secrets.NEON_DATABASE_URL }}" \
-            -var "redis_connection_string=${{ secrets.REDIS_CONNECTION_STRING }}"
+          jq -n \
+            --arg environment "dev" \
+            --arg database "${{ secrets.NEON_DATABASE_URL }}" \
+            --arg redis "${{ secrets.REDIS_CONNECTION_STRING }}" \
+            '{Variables:{ASPNETCORE_ENVIRONMENT:$environment,ConnectionStrings__Default:$database,Redis__ConnectionString:$redis}}' \
+            > lambda-env.json
 
-      - name: Show API URL
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: terraform output api_base_url
+          aws lambda update-function-configuration \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --region "$AWS_REGION" \
+            --environment file://lambda-env.json
+
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --region "$AWS_REGION"
+
+      - name: Update Lambda code
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --region "$AWS_REGION" \
+            --zip-file "fileb://$ZIP_PATH"
+
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --region "$AWS_REGION"
